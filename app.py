@@ -80,9 +80,43 @@ def export_pdf(text):
     pdf.set_font("Arial", size=12)
     for line in text.split('\n'):
         pdf.multi_cell(0, 10, line)
-    path = "/content/chat_history.pdf"
+    path = "/tmp/chat_history.pdf"
     pdf.output(path)
     return path
+
+# ----------- NEW FEATURE: Document Summarization ----------------
+
+def generate_summary(documents):
+    embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+    vectordb = FAISS.from_documents(documents, embeddings)
+    retriever = vectordb.as_retriever(search_kwargs={"k": 5})
+
+    summary_prompt = PromptTemplate(
+        input_variables=["context", "question"],
+        template="""
+You are a document summarizer. Given the following context from a document, summarize it concisely.
+
+Context:
+{context}
+
+Question: Please summarize the document.
+
+Answer:"""
+    )
+
+    qa = RetrievalQA.from_chain_type(
+        llm=ChatOpenAI(
+            model_name="gpt-3.5-turbo",
+            temperature=0.3,
+            openai_api_key=OPENAI_API_KEY
+        ),
+        chain_type="stuff",
+        retriever=retriever,
+        chain_type_kwargs={"prompt": summary_prompt}
+    )
+
+    result = qa.run("Please summarize the document.")
+    return result
 
 # ----------- UI Setup ----------------
 
@@ -101,11 +135,28 @@ with st.sidebar:
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
+# ----------- Document Processing and Chatbot Init ----------------
+
 if uploaded_files:
     raw_docs = load_documents(uploaded_files)
     chunks = split_docs(raw_docs)
     qa_chain = init_chatbot(chunks, top_k)
 
+    # ----------- NEW FEATURE: Generate Summary -----------
+    st.markdown("### 📄 Document Summary")
+    if st.button("🧾 Generate Summary"):
+        with st.spinner("Generating summary..."):
+            summary = generate_summary(chunks)
+        st.success("Summary Generated!")
+        with st.expander("📖 Click to view summary", expanded=True):
+            st.markdown(summary)
+
+            # Optionally allow download
+            b64_summary = base64.b64encode(summary.encode()).decode()
+            href = f'<a href="data:file/txt;base64,{b64_summary}" download="document_summary.txt">⬇️ Download Summary as TXT</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
+    # ----------- Ask a Question -----------
     question = st.text_input("💬 Ask a question from your documents")
 
     if question:
@@ -113,7 +164,6 @@ if uploaded_files:
         answer = response["result"]
         sources = [doc.metadata.get("source", "Unknown") for doc in response["source_documents"]]
 
-        # Save to memory
         st.session_state.chat_history.append({
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
             "question": question,
@@ -126,7 +176,7 @@ if uploaded_files:
 st.subheader("🧠 Chat History")
 
 if st.session_state.chat_history:
-    for chat in st.session_state.chat_history[::-1]:  # reverse order
+    for chat in st.session_state.chat_history[::-1]:
         with st.container():
             st.markdown(f"""
                 <div style="background:#f1f1f1;border-radius:10px;padding:10px;margin-bottom:10px">
