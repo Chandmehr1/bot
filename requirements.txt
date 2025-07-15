@@ -7,3 +7,4 @@ python-docx
 pypdf
 python-dotenv
 langchain_community
+tiktoken
