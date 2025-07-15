@@ -10,12 +10,11 @@ import openai
 import tempfile
 import os
 import base64
-
 import datetime
 from fpdf import FPDF
 
-# 🔐 Set your OpenAI API Key
-OPENAI_API_KEY = ""
+# ✅ Securely fetch the OpenAI API Key from Streamlit secrets
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 openai.api_key = OPENAI_API_KEY
 
 st.set_page_config(page_title="📚 PDF Chatbot (Memory + LangChain)", layout="wide")
@@ -47,7 +46,6 @@ def init_chatbot(documents, k):
     vectordb = FAISS.from_documents(documents, embeddings)
     retriever = vectordb.as_retriever(search_kwargs={"k": k})
 
-    # ✅ Define proper PromptTemplate
     custom_prompt = PromptTemplate(
         input_variables=["context", "question"],
         template="""
